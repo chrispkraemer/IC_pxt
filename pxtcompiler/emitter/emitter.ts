@@ -935,6 +935,16 @@ namespace ts.pxtc {
         entryPoint: string): EmitResult {
 
 
+        /*
+        console.log("Program")
+        console.log(program)
+        console.log("opts")
+        console.log(opts)
+        console.log("res")
+        console.log(res)
+        */
+
+
         //throw "HELP I think I found something";
         if (compilerHooks.preBinary)
             compilerHooks.preBinary(program, opts, res)
@@ -955,6 +965,16 @@ namespace ts.pxtc {
         let pendingFunctionDefinitions: FunctionDeclaration[] = []
 
         currNodeWave++
+
+
+        /*
+        console.log("Program")
+        console.log(program)
+        console.log("opts")
+        console.log(opts)
+        console.log("res")
+        console.log(res)
+        */
 
         if (opts.target.isNative) {
             if (!opts.extinfo || !opts.extinfo.hexinfo) {
@@ -995,8 +1015,8 @@ namespace ts.pxtc {
         bin.options = opts;
         bin.target = opts.target;
         //console.log(proc)
-        //console.log("BINARY")
-        //console.log(bin)
+        console.log(" initial BINARY")
+        console.log(bin)
 
         function reset() {
             bin.reset()
@@ -1024,9 +1044,16 @@ namespace ts.pxtc {
 
             const main = files.find(sf => sf.fileName === "main.ts");
 
+            //might break everything
+            const custom = files.find(sf => sf.fileName === "custom.ts")
+            
+
             if (main) {
                 files = files.filter(sf => sf.fileName !== "main.ts");
+                
                 files.push(main);
+                console.log("files")
+                console.log(files)
             }
 
             files.forEach(f => {
@@ -1034,6 +1061,8 @@ namespace ts.pxtc {
                     allStmts.push(s)
                 });
             });
+            console.log("all stmts")
+            //console.log(allStmts)
         }
 
         let mainSrcFile = program.getSourceFiles().filter(f => Util.endsWith(f.fileName, entryPoint))[0];
@@ -1100,14 +1129,46 @@ namespace ts.pxtc {
         emit(rootFunction)
         let addIntermitent = false
         for(let glb_var of bin.globals){
-            if(glb_var.getName() == "start"){
+            if(glb_var.getName() == "intermittent"){
                 addIntermitent = true
+            }
+            if(glb_var.getName() == "base"){
+                bin.optimization = 0
+                bin.opt_val = null
+            }
+            if(glb_var.getName() == "timer"){
+                bin.optimization = 1
+                //console.log("GET TEXT HERE")
+                //console.log(glb_var.def.getText())
+                let timerstrlen = "timer = ".length
+                let timerval = parseInt(glb_var.def.getText().substring(timerstrlen))
+                //console.log(timerval)
+                bin.opt_val = timerval
+                bin.opt_cell = glb_var
+
+            }
+            if(glb_var.getName() == "jit"){
+                bin.optimization = 2
+                bin.opt_cell = glb_var
+                let jitstrlen = "jit = ".length
+                let jitval = parseInt(glb_var.def.getText().substring(jitstrlen))
+                bin.opt_val = jitval
+            }
+            if(glb_var.getName() == "weight"){
+                bin.optimization = 3
+                bin.opt_cell = glb_var
+                let weightstrlen = "weight = ".length
+                let weightval = parseInt(glb_var.def.getText().substring(weightstrlen))
+                bin.opt_val = weightval
             }
         }
         if(addIntermitent){
             codeAnalysis()
-            setup()
-            codeTransformations()
+            if(bin.varsToCheckpoint.length > 0){
+                setup()
+                codeTransformations()
+            }
+            
         }
         
        
@@ -1221,7 +1282,28 @@ namespace ts.pxtc {
 
         function codeTransformations(){
             for(let prc of bin.procs){
-                runOnProc(prc)
+                
+                
+                if(prc.info){
+                   
+                    if(prc.info.decl){
+                       
+                        if(prc.info.decl.parent){
+                            
+                            if(prc.info.decl.parent.getSourceFile()){
+                              
+                                if(prc.info.decl.parent.getSourceFile().fileName == "main.ts"){
+                                    runOnProc(prc)
+                                }
+                            }
+                            
+                            
+                        }
+                    }
+                }
+                
+               
+                
             }
         }
 
@@ -1236,10 +1318,10 @@ namespace ts.pxtc {
             for(let i = 0; i<bin.varsToCheckpoint.length; i++){
                 //expr0 is the buffer
                 let expr0 = new ir.Expr(9,null,bin.saveBufferCell)
-                //int16le
-                let expr1 = new ir.Expr(1,null,3)
+                //int32be
+                let expr1 = new ir.Expr(1,null,10)
                 //position(i*4)
-                let expr2 = new ir.Expr(1,null,i*2)
+                let expr2 = new ir.Expr(1,null,i*4)
                 //expr3 is the variable
                 let expr3 = new ir.Expr(9,null,bin.varsToCheckpoint[i])
                 //build the total expression
@@ -1255,13 +1337,69 @@ namespace ts.pxtc {
             bin.setMap = set_map
             bin.getMap = get_map
 
-             //build serial.writebuffer()
-            let bufr__cell_expr = new ir.Expr(9,null,bin.saveBufferCell)
-            let serial_bufr_expr = new ir.Expr(3,[bufr__cell_expr],"serial::writeBuffer")
-                
-            let serial_bufr_write = new ir.Stmt(1,serial_bufr_expr)
+            let fram_begin_index
+            let fram_write_index
+            let fram_read_index
 
-            bin.bufrWriteStmt = serial_bufr_write
+            
+
+            for(let i = 0; i < bin.procs.length; i++){
+                if(bin.procs[i].getName() == "begin"){
+                    console.log("found index begin")
+                    console.log(bin.procs[i])
+                    fram_begin_index = i
+                }
+                if(bin.procs[i].getName() == "write_buffer"){
+                    console.log("found index write buffer")
+                    console.log(bin.procs[i])
+                    fram_write_index = i
+                }
+                if(bin.procs[i].getName() == "read_buffer"){
+                    console.log("found index read buffer")
+                    console.log(bin.procs[i])
+                    fram_read_index = i
+                }
+            }
+
+           
+
+
+            //build fram.begin()
+            let fram_begin_procid: ir.ProcId = {
+                proc: bin.procs[fram_begin_index],
+                callLocationIndex: 99,
+                virtualIndex: null,
+                ifaceIndex: null
+            }
+            let fram_begin_expr = new ir.Expr(4,[], fram_begin_procid)
+            let fram_begin_stmt = new ir.Stmt(1,fram_begin_expr)
+
+            console.log(fram_begin_stmt)
+
+            //build fram.write_buffer()
+            let bufr__cell_expr = new ir.Expr(9,null,bin.saveBufferCell)
+            let fram_addr_expr = new ir.Expr(1,null,valueEncode(1))
+            let fram_write_buffer_procid: ir.ProcId = {
+                proc: bin.procs[fram_write_index],
+                callLocationIndex: 14,
+                virtualIndex: null,
+                ifaceIndex: null
+            }
+            let fram_bufr_write_expr = new ir.Expr(4,[fram_addr_expr, bufr__cell_expr],fram_write_buffer_procid)
+                
+            let fram_bufr_write = new ir.Stmt(1,fram_bufr_write_expr)
+
+            bin.bufrWriteStmt = fram_bufr_write
+
+            console.log(fram_bufr_write)
+
+              //build serial.writebuffer()
+              //let bufr__cell_expr = new ir.Expr(9,null,bin.saveBufferCell)
+              let serial_bufr_expr = new ir.Expr(3,[bufr__cell_expr],"serial::writeBuffer")
+                  
+              let serial_bufr_write = new ir.Stmt(1,serial_bufr_expr)
+  
+              //bin.bufrWriteStmt = serial_bufr_write
 
             //build bufr.fill(0)
             let expr_0 = new ir.Expr(1,null,0)
@@ -1271,19 +1409,68 @@ namespace ts.pxtc {
             
 
             //build bufr = serial.readbuffer(8) (8 because bufr is currently 8 bytes, need to make a system that automates size)
-            let expr_8 = new ir.Expr(1,null,8)
-            let bufr_read_expr = new ir.Expr(3,[expr_8],"serial::readBuffer")
-            let encap_bufr_read_expr = new ir.Expr(8,[bufr__cell_expr,bufr_read_expr],undefined)
-            let bufr_read_stmt = new ir.Stmt(1,encap_bufr_read_expr)
+            //let expr_8 = new ir.Expr(1,null,8)
+            //let bufr_read_expr = new ir.Expr(3,[expr_8],"serial::readBuffer")
+            //let encap_bufr_read_expr = new ir.Expr(8,[bufr__cell_expr,bufr_read_expr],undefined)
+            //let bufr_read_stmt = new ir.Stmt(1,encap_bufr_read_expr)
+
+            //build bufr = fram.readbuffer
+            let length_expr = new ir.Expr(1, [],valueEncode((bin.varsToCheckpoint.length * 4)+1))
+            /*
+            let convinfos: ir.ConvInfo[] = []
+            let length_mask: ir.MaskInfo = {
+                refMask: 1,
+                conversions: convinfos
+            }
+            length_expr.mask = length_mask
+            */
+            let fram_read_buffer_procid: ir.ProcId = {
+                proc: bin.procs[fram_read_index],
+                callLocationIndex: 30,
+                virtualIndex: null,
+                ifaceIndex: null
+            }
+            
+            let fram_read_expr = new ir.Expr(4,[fram_addr_expr,length_expr],fram_read_buffer_procid)
+            let bufr_fram_assign_expr = new ir.Expr(8,[bufr__cell_expr,fram_read_expr],null)
+            let fram_read_stmt = new ir.Stmt(1,bufr_fram_assign_expr)
            
 
-            //build if statement (if(start==1))
-            let start_expr = new ir.Expr(9,null,bin.varsToCheckpoint[0])
-            let expr_1 = new ir.Expr(1,null,1)
-            let numop_expr = new ir.Expr(3,[start_expr,expr_1],"numops::eq")
+            //build if statement
+            
+            //expr0 is the buffer
+            let expr0 = new ir.Expr(9,null,bin.saveBufferCell)
+            //int8be
+            let expr1 = new ir.Expr(1,null,1)
+            let valexpr1 = new ir.Expr(1,null,valueEncode(1))
+            //position
+            let expr2 = new ir.Expr(1,null,(bin.varsToCheckpoint.length*4))
+            //build the total expression
+            let canary_expr = new ir.Expr(3,[expr0,expr1,expr2], "BufferMethods::getNumber")
+            let canary_set_expr = new ir.Expr(3,[expr0,expr1,expr2,valexpr1],"BufferMethods::setNumber")
+            let canary_set_stmt = new ir.Stmt(1,canary_set_expr)
+            bin.canarySetStmt = canary_set_stmt
+            let expr_1 = new ir.Expr(1,null,valueEncode(1))
+            let numop_expr = new ir.Expr(3,[canary_expr,expr_1],"numops::eq")
             let toBool_expr = new ir.Expr(3,[numop_expr],"numops::toBoolDecr")
             let if_stmt = new ir.Stmt(3,toBool_expr)
             if_stmt.jmpMode = 2
+
+            //build optimization if
+            //timerif
+            
+            if(bin.optimization == 1 || bin.optimization == 3){
+                // sets "timer" or "weight" variable to 0 as first mainstmt
+                let opt_cellref_expr = new ir.Expr(9, null, bin.opt_cell)
+                let val0_expr = new ir.Expr(1, null, valueEncode(0))
+                let opt_store_expr = new ir.Expr(8,[opt_cellref_expr,val0_expr],null)
+                let opt_store_stmt = new ir.Stmt(1,opt_store_expr)
+                bin.mainStmts.push(opt_store_stmt)
+
+            } 
+            
+            
+            
             
 
             // make the labels
@@ -1299,18 +1486,30 @@ namespace ts.pxtc {
             goto_stmt.lblName = afterif.lblName
             goto_stmt.jmpMode = 1
 
-            bin.mainStmts.push(bufr_fill_stmt)
-            bin.mainStmts.push(bufr_read_stmt)
+            //bin.mainStmts.push(fram_begin_stmt)
+            //bin.mainStmts.push(bufr_fill_stmt)
+            bin.mainStmts.push(fram_read_stmt)
+            //bin.mainStmts.push(get_map.get("start"))
             bin.mainStmts.push(if_stmt)
             for(let varib of bin.varsToCheckpoint){
                 bin.mainStmts.push(get_map.get(varib.getName()))
+                
             }
-            bin.mainStmts.push(elselbl)
             bin.mainStmts.push(goto_stmt)
+            bin.mainStmts.push(elselbl)
             bin.mainStmts.push(afterif)
  
 
 
+        }
+
+        function valueEncode(input: number){
+            if(opts.target.nativeType == "thumb"){
+                return (input * 2) + 1
+            } else {
+                return input
+            }
+            
         }
 
         function findModifications(){
@@ -1332,94 +1531,264 @@ namespace ts.pxtc {
                             }
                         }
                     }
-                    if(count > 1){
+                    if(count > 1 ){
                         glb_var.isModified = true
-                        bin.varsToCheckpoint.push(glb_var)
+                        if(glb_var.getName() != "timer" && glb_var.getName() != "weight" && glb_var.getName() != "jit"){
+                            bin.varsToCheckpoint.push(glb_var)
+                        }
+                        
                     }
                 }
                 
             }
-            if(bin.varsToCheckpoint.length < 1){
-                throw "No Vars to Checkpoint"
-            }
+            //if(bin.varsToCheckpoint.length < 1){
+                //throw "No Vars to Checkpoint"
+            //}
         }
 
         function emitInPlace(proc: ir.Procedure, target: number, insert: ir.Stmt){
             let emitStack = new Array()
-            let i
-            for(i = 0; i < target; i++){
+            let i = proc.body.length
+            let j = proc.body.length
+            for(i; i > target; i--){
                 emitStack.push(proc.body.pop())
             }
-            console.log(proc.body)
             proc.emit(insert)
-            for(i = 0; i < target; i++){
+            
+            while(emitStack.length > 0){
                 proc.emit(emitStack.pop())
             }
         }
 
         function emitBeforeRet(proc: ir.Procedure, insert: ir.Stmt){
-            emitInPlace(proc,4,insert)
+            emitInPlace(proc,proc.body.length-4,insert)
         }
 
-        function runOnProc(proc: ir.Procedure){
-            let emit_stack = new Array()
-
-            //need to find a way to make sure only the user program is transformmed
-            let applytoprog = false
-            for(let checkvar of bin.varsToCheckpoint){
-                if(checkvar.getName() == "start"){
-                    console.log("START FOUND")
-                    applytoprog = true
-                }
+        function emitBlockInPlace(proc: ir.Procedure, target: number, insert:ir.Stmt[]){
+            let emitStack = new Array()
+            let i = proc.body.length
+            for(i; i > target; i--){
+                emitStack.push(proc.body.pop())
             }
-
-
-            if(applytoprog){
+            for(let p = 0; p < insert.length; p++){
+                console.log(insert[p])
+                proc.emit(insert[p])
+            }
             
-                if(proc.getName() == "<main>"){
-                    for(let mainStmt of bin.mainStmts){
-                        //need to write emitblock and emitblockbeforeret in ir.ts
-                        emitInPlace(proc,6, mainStmt)
+            while(emitStack.length > 0){
+                proc.emit(emitStack.pop())
+            }
+        }
+
+        function mainBoilerplate(proc: ir.Procedure, start:number, end:number){
+            //boilerplate = 3
+            //num of vars = 6
+            //fram stuff = 3
+            //total = 12
+            let i
+        
+            let emittedmainstmts = false
+            for(i = start; i < end; i++){
+                
+                if(proc.body[i].stmtKind == 2){
+                    console.log("found lbl in main at: "+ i)
+                    emitMainStmts(proc,i)
+                    emittedmainstmts = true
+                    break
+                }
+                /* maybe just labels is better?
+                else if(proc.body[i].expr){
+                    if(proc.body[i].expr.exprKind == 3 || // proc.body[i].expr.exprKind == 4 ){
+                        console.log("found proc or runtime call in main at: "+ i)
+                        emitMainStmts(proc,i)
+                        emittedmainstmts = true
+                        break
                     }
-                } 
-                else {
-                    let has_emitted = false
-                    for(let body_statement of proc.body){
-                        if(body_statement.stmtKind == 2){
-                            if(body_statement.lblName.includes("ret")){
-                                if(has_emitted){
-                                    console.log(bin.bufrWriteStmt)
-                                    emitBeforeRet(proc,bin.bufrWriteStmt)
-                                    
+                }
+                */
+                
+                
+            }
+            
+
+            return i+bin.mainStmts.length
+        }
+
+        function Checkpoint(proc: ir.Procedure, start:number, end:number, incominglblId:string){
+            let emit_stack = new Array()
+            let emit_set = new Set()
+            
+         
+            
+            for(let i = start; i < end; i++){
+                if(proc.body[i].stmtKind == 2){
+                    console.log("lbl found in Checkpoint: "+proc.body[i].lblName)
+                    if(proc.body[i].lblName.includes("fortop")){
+                        let strlen = proc.body[i].lblName.length
+                        let idstart = proc.body[i].lblName.lastIndexOf(".")
+                        let lblId = proc.body[i].lblName.substring(idstart,strlen)
+                        console.log("this is the lblid!")
+                        console.log(lblId)
+                        
+                        i++
+                        let newstart = i
+                        while(1){
+                            if(proc.body[i].stmtKind == 2){
+                                if(proc.body[i].lblName.includes("brk"+lblId)){
+                                    break;
                                 }
                             }
-                            break
-                        } else if(body_statement.expr){
-                            if(body_statement.expr.args){
-                                if(body_statement.expr.args[0]){
-                                    if(body_statement.expr.args[0].data){
-                                        if(body_statement.expr.args[0].data.def){
-                                            if(body_statement.expr.args[0].data.def.name){
-                                                if(bin.setMap.has(body_statement.expr.args[0].data.def.name.escapedText)){
-                                                    
-                                                    emitBeforeRet(proc,bin.setMap.get(body_statement.expr.args[0].data.def.name.escapedText))
-                                                    has_emitted = true
-                                                    
-                                                }
+                            i++
+                        }
+                        let numEmitted = Checkpoint(proc,newstart,i-1,lblId)
+                        end+=numEmitted
+                        i+=numEmitted
+
+                    } else if(proc.body[i].lblName.includes("cont")){
+                        let strlen = proc.body[i].lblName.length
+                        let idstart = proc.body[i].lblName.lastIndexOf(".")
+                        let lblId = proc.body[i].lblName.substring(idstart,strlen)
+                        
+                        console.log("this is the lblid!")
+                        console.log(lblId)
+
+                        if(incominglblId != lblId){
+                            i++
+                            let newstart = i
+                            while(1){
+                                if(proc.body[i].stmtKind == 2){
+                                    if(proc.body[i].lblName.includes("brk"+lblId)){
+                                        break;
+                                    }
+                                }
+                                i++
+                            }
+                            let numEmitted = Checkpoint(proc,newstart,i-1,lblId) // changed lblId from "", not sure if bug or on purpose
+                            end+=numEmitted
+                            i+=numEmitted
+                        }
+                        
+                        
+                    }
+                } else if(proc.body[i].expr){
+                    if(proc.body[i].expr.args){
+                        if(proc.body[i].expr.args[0]){
+                            if(proc.body[i].expr.args[0].data){
+                                if(proc.body[i].expr.args[0].data.def){
+                                    if(proc.body[i].expr.args[0].data.def.name){
+                                        if(bin.setMap.has(proc.body[i].expr.args[0].data.def.name.escapedText)){
+                                            if(!emit_set.has(bin.setMap.get(proc.body[i].expr.args[0].data.def.name.escapedText))){
+                                                emit_stack.push(bin.setMap.get(proc.body[i].expr.args[0].data.def.name.escapedText))
+                                                emit_set.add(bin.setMap.get(proc.body[i].expr.args[0].data.def.name.escapedText))
                                             }
                                             
                                         }
                                     }
+                                    
                                 }
                             }
                         }
                     }
                 }
-
-                
-            
-            
             }
+            if(emit_stack.length > 0){
+                emit_stack.push(bin.canarySetStmt)
+                emit_stack.push(bin.bufrWriteStmt)
+                let elselbl = proc.mkLabel("else")
+                if(bin.optimization == 1){
+                    let millis_expr = new ir.Expr(3, [], "control::millis");
+                    
+                    let timer_cellref_expr = new ir.Expr(9, null, bin.opt_cell)
+                    let expr_2 = new ir.Expr(1, null, valueEncode(2))
+                    let expr_1 = new ir.Expr(1, null, valueEncode(1))
+                    let millis_mul_expr = new ir.Expr(3,[millis_expr,expr_2], "numops::muls")
+                    let millis_fromInt = fromInt(millis_expr)
+                    let millis_dub_add_expr = new ir.Expr(3, [millis_mul_expr, expr_1], "numops::adds")
+                    let debug_expr = new ir.Expr(8, [timer_cellref_expr, millis_fromInt], "")
+                    let debug_stmt = new ir.Stmt(1, debug_expr)
+                    let subs_expr = new ir.Expr(3, [millis_fromInt,timer_cellref_expr],"numops::subs")
+                    let duration_expr = new ir.Expr(1,null,valueEncode(bin.opt_val))
+                    let numops_gt_expr = new ir.Expr(3,[subs_expr,duration_expr],"numops::gt")
+                    let gtBool_expr = new ir.Expr(3,[numops_gt_expr], "numops::toBoolDecr")
+                    let timerif_stmt = new ir.Stmt(3,gtBool_expr)
+                    timerif_stmt.jmpMode = 2
+                    timerif_stmt.lbl = elselbl
+                    timerif_stmt.lblName = elselbl.lblName
+                    //timer reset
+                    let timer_store_expr = new ir.Expr(8,[timer_cellref_expr,millis_fromInt],"")
+                    let timer_store_stmt = new ir.Stmt(1,timer_store_expr)
+                    let null_stmt = new ir.Stmt(4,null)
+                    emit_stack.unshift(null_stmt)
+                    emit_stack.unshift(timer_store_stmt) //ran into bug where I can't unshift all at once, have to separate them
+                    emit_stack.unshift(timerif_stmt)
+                    //emit_stack.unshift(null_stmt)
+                    //emit_stack.unshift(debug_stmt)
+                    emit_stack.push(elselbl)
+                } else if(bin.optimization == 2){
+                    let p1_expr = new ir.Expr(1, null, 102)
+                    let analogread_expr = new ir.Expr(3, [p1_expr], "pins::analogReadPin")
+                    let jitcell_ref = new ir.Expr(9, null, bin.opt_cell)
+                    let analogfromint_expr = fromInt(analogread_expr)
+                    let numopts_lt_expr = new ir.Expr(3, [analogfromint_expr, jitcell_ref], "numops::gt")
+                    let toBool_expr = new ir.Expr(3, [numopts_lt_expr], "numops::toBoolDecr")
+                    let jitif_stmt = new ir.Stmt(3, toBool_expr)
+                    jitif_stmt.jmpMode = 2
+                    jitif_stmt.lbl = elselbl
+                    jitif_stmt.lblName = elselbl.lblName
+                    emit_stack.unshift(jitif_stmt)
+                    emit_stack.push(elselbl)
+                } else if(bin.optimization == 3){
+                    if(incominglblId != ""){
+                        let weight_cellref_expr = new ir.Expr(9, null, bin.opt_cell)
+                        let val_expr = new ir.Expr(1, null, valueEncode(bin.opt_val))
+                        let numops_gt_expr = new ir.Expr(3,[weight_cellref_expr,val_expr], "numops::gt")
+                        let weightBool_expr = new ir.Expr(3, [numops_gt_expr], "numops::toBoolDecr")
+                        let weightif_stmt = new ir.Stmt(3, weightBool_expr)
+                        weightif_stmt.jmpMode = 2
+                        weightif_stmt.lbl = elselbl
+                        weightif_stmt.lblName = elselbl.lblName
+                        let val0_expr = new ir.Expr(1, null, valueEncode(0))
+                        let opt_store_expr = new ir.Expr(8,[weight_cellref_expr,val0_expr],null)
+                        let opt_store_stmt = new ir.Stmt(1,opt_store_expr)
+                        emit_stack.unshift(opt_store_stmt)
+                        emit_stack.unshift(weightif_stmt)
+                        emit_stack.push(elselbl)
+                        let val1_expr = new ir.Expr(1, null, valueEncode(1))
+                        let add_expr = new ir.Expr(3, [weight_cellref_expr, val1_expr], "numops::adds")
+                        let storeadd_expr = new ir.Expr(8, [weight_cellref_expr, add_expr], null)
+                        let storeadd_stmt = new ir.Stmt(1,storeadd_expr)
+                        emit_stack.push(storeadd_stmt)
+
+                        //one of these expressions is fucking things up when it is emitted
+
+                    }
+                }
+                
+                emitBlockInPlace(proc,end,emit_stack)
+                return emit_stack.length
+            } else {
+                return 0
+            }
+        }
+
+        function emitMainStmts(proc: ir.Procedure, target:number){
+            //weird undefined error when I passed bin.mainstmts to emitBlockInPlace
+            emitBlockInPlace(proc,target,bin.mainStmts)
+        }
+
+        function runOnProc(proc: ir.Procedure){
+
+            //need to find a way to make sure only the user program is transformmed
+            
+            if(proc.getName() == "<main>"){
+                let mainstart = mainBoilerplate(proc,0,proc.body.length)
+                console.log("mainstart = "+mainstart)
+                Checkpoint(proc, mainstart, proc.body.length-4,"")
+            } else {
+                Checkpoint(proc,0,proc.body.length-4,"")
+            }
+            
+
 
         }
 
@@ -1428,7 +1797,26 @@ namespace ts.pxtc {
             for(let glb_var of bin.globals){
                 if(glb_var.getName() == "bufr"){
                     bin.saveBufferCell = glb_var
-                } 
+                    
+                    for(let i = 0; i < bin.procs[0].body.length; i++){
+                        if(bin.procs[0].body[i].expr){
+                            if(bin.procs[0].body[i].expr.args){
+                                if(bin.procs[0].body[i].expr.args[1]){
+                                    if(bin.procs[0].body[i].expr.args[1].args){
+                                        if(bin.procs[0].body[i].expr.args[1].args[0]){
+                                            if(bin.procs[0].body[i].expr.args[1].data){
+                                                if(bin.procs[0].body[i].expr.args[1].data == "pins::createBuffer"){
+                                                    bin.procs[0].body[i].expr.args[1].args[0].data = (bin.varsToCheckpoint.length*4)+1
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                }
             }
             if(bin.saveBufferCell == null){
                 console.log("THERE IS NO BUFFER")
@@ -5288,6 +5676,11 @@ ${lbl}: .short 0xffff
         getMap: any;
         mainStmts: ir.Stmt[] = [];
         bufrWriteStmt: ir.Stmt;
+        canarySetStmt: ir.Stmt;
+        optimization: number;
+        opt_instructions: ir.Stmt[] = [];
+        opt_val: any;
+        opt_cell: ir.Cell;
 
         reset() {
             this.lblNo = 0
