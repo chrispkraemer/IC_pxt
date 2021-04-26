@@ -1015,8 +1015,8 @@ namespace ts.pxtc {
         bin.options = opts;
         bin.target = opts.target;
         //console.log(proc)
-        console.log(" initial BINARY")
-        console.log(bin)
+        //console.log(" initial BINARY")
+        //console.log(bin)
 
         function reset() {
             bin.reset()
@@ -1052,8 +1052,8 @@ namespace ts.pxtc {
                 files = files.filter(sf => sf.fileName !== "main.ts");
                 
                 files.push(main);
-                console.log("files")
-                console.log(files)
+                //console.log("files")
+                //console.log(files)
             }
 
             files.forEach(f => {
@@ -1061,7 +1061,7 @@ namespace ts.pxtc {
                     allStmts.push(s)
                 });
             });
-            console.log("all stmts")
+            //console.log("all stmts")
             //console.log(allStmts)
         }
 
@@ -1113,15 +1113,15 @@ namespace ts.pxtc {
         needsUsingInfo = false
         bin.finalPass = true
 
-        console.log("about to do final pass")
+        //console.log("about to do final pass")
 
         //emit(rootFunction)
 
-        console.log("2 printing bin procs")
-        console.log(bin)
+        //console.log("2 printing bin procs")
+        //console.log(bin)
 
-        console.log("rootfunction")
-        console.log(rootFunction)
+        //console.log("rootfunction")
+        //console.log(rootFunction)
         //let root_copy = rootFunction.parent.text
         //root_copy = "led.plot(4,4)"
         //rootFunction.parent.text = root_copy
@@ -1226,7 +1226,7 @@ namespace ts.pxtc {
         let pass1 = U.cpuUs()
         res.times["pass1"] = pass1 - pass0
         
-        console.log("3 printing bin procs")
+        //console.log("3 printing bin procs")
         //console.log(bin.procs.toString())
 
         catchErrors(rootFunction, finalEmit)
@@ -1345,18 +1345,18 @@ namespace ts.pxtc {
 
             for(let i = 0; i < bin.procs.length; i++){
                 if(bin.procs[i].getName() == "begin"){
-                    console.log("found index begin")
-                    console.log(bin.procs[i])
+                    //console.log("found index begin")
+                    //console.log(bin.procs[i])
                     fram_begin_index = i
                 }
                 if(bin.procs[i].getName() == "write_buffer"){
-                    console.log("found index write buffer")
-                    console.log(bin.procs[i])
+                    //console.log("found index write buffer")
+                    //console.log(bin.procs[i])
                     fram_write_index = i
                 }
                 if(bin.procs[i].getName() == "read_buffer"){
-                    console.log("found index read buffer")
-                    console.log(bin.procs[i])
+                    //console.log("found index read buffer")
+                    //console.log(bin.procs[i])
                     fram_read_index = i
                 }
             }
@@ -1374,7 +1374,7 @@ namespace ts.pxtc {
             let fram_begin_expr = new ir.Expr(4,[], fram_begin_procid)
             let fram_begin_stmt = new ir.Stmt(1,fram_begin_expr)
 
-            console.log(fram_begin_stmt)
+            //console.log(fram_begin_stmt)
 
             //build fram.write_buffer()
             let bufr__cell_expr = new ir.Expr(9,null,bin.saveBufferCell)
@@ -1391,7 +1391,7 @@ namespace ts.pxtc {
 
             bin.bufrWriteStmt = fram_bufr_write
 
-            console.log(fram_bufr_write)
+            //console.log(fram_bufr_write)
 
               //build serial.writebuffer()
               //let bufr__cell_expr = new ir.Expr(9,null,bin.saveBufferCell)
@@ -1571,7 +1571,7 @@ namespace ts.pxtc {
                 emitStack.push(proc.body.pop())
             }
             for(let p = 0; p < insert.length; p++){
-                console.log(insert[p])
+                //console.log(insert[p])
                 proc.emit(insert[p])
             }
             
@@ -1591,7 +1591,7 @@ namespace ts.pxtc {
             for(i = start; i < end; i++){
                 
                 if(proc.body[i].stmtKind == 2){
-                    console.log("found lbl in main at: "+ i)
+                    //console.log("found lbl in main at: "+ i)
                     emitMainStmts(proc,i)
                     emittedmainstmts = true
                     break
@@ -1622,13 +1622,13 @@ namespace ts.pxtc {
             
             for(let i = start; i < end; i++){
                 if(proc.body[i].stmtKind == 2){
-                    console.log("lbl found in Checkpoint: "+proc.body[i].lblName)
+                    //console.log("lbl found in Checkpoint: "+proc.body[i].lblName)
                     if(proc.body[i].lblName.includes("fortop")){
                         let strlen = proc.body[i].lblName.length
                         let idstart = proc.body[i].lblName.lastIndexOf(".")
                         let lblId = proc.body[i].lblName.substring(idstart,strlen)
-                        console.log("this is the lblid!")
-                        console.log(lblId)
+                        //onsole.log("this is the lblid!")
+                        //console.log(lblId)
                         
                         i++
                         let newstart = i
@@ -1649,8 +1649,8 @@ namespace ts.pxtc {
                         let idstart = proc.body[i].lblName.lastIndexOf(".")
                         let lblId = proc.body[i].lblName.substring(idstart,strlen)
                         
-                        console.log("this is the lblid!")
-                        console.log(lblId)
+                        //console.log("this is the lblid!")
+                        //console.log(lblId)
 
                         if(incominglblId != lblId){
                             i++
@@ -1782,7 +1782,7 @@ namespace ts.pxtc {
             
             if(proc.getName() == "<main>"){
                 let mainstart = mainBoilerplate(proc,0,proc.body.length)
-                console.log("mainstart = "+mainstart)
+                //console.log("mainstart = "+mainstart)
                 Checkpoint(proc, mainstart, proc.body.length-4,"")
             } else {
                 Checkpoint(proc,0,proc.body.length-4,"")
@@ -1819,7 +1819,7 @@ namespace ts.pxtc {
                 }
             }
             if(bin.saveBufferCell == null){
-                console.log("THERE IS NO BUFFER")
+                //console.log("THERE IS NO BUFFER")
                 throw "NO BUFFER"
             }
         }
