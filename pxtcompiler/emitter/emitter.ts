@@ -1902,7 +1902,130 @@ namespace ts.pxtc {
                     if(proc.body[i].lblName.includes("final")){
                         console.log("found a final, leaving")
                         return
-                    } else if(emit_stack.length > 0){
+                    }
+                } else {
+                        let label_number_expr = new ir.Expr(1, null, valueEncode(bin.checklabel.length))
+                        let label_cell_expr = new ir.Expr(9, null, bin.label_cell)
+                        let label_assign_expr = new ir.Expr(8, [label_cell_expr, label_number_expr], undefined)
+                        let label_assign_stmt = new ir.Stmt(1,label_assign_expr)
+        
+                        emit_stack.push(label_assign_stmt)
+
+
+                        for(let i = 0; i < bin.varsToCheckpoint.length; i++){
+                            emit_stack.push(bin.setMap.get(bin.varsToCheckpoint[i].getName()))
+                        }
+
+                        //console.log(bin.setMap)
+                        //console.log(emit_stack)
+
+
+                        emit_stack.push(bin.gen_invert)
+                        emit_stack.push(bin.writeEnableStmt)
+                        emit_stack.push(bin.gen_write8)
+
+                    
+
+
+                        let elselbl = proc.mkLabel("else")
+                        if(bin.optimization == 1){
+                            let millis_expr = new ir.Expr(3, [], "control::millis");
+                            
+                            let timer_cellref_expr = new ir.Expr(9, null, bin.opt_cell)
+                            let expr_2 = new ir.Expr(1, null, valueEncode(2))
+                            let expr_1 = new ir.Expr(1, null, valueEncode(1))
+                            let millis_mul_expr = new ir.Expr(3,[millis_expr,expr_2], "numops::muls")
+                            let millis_fromInt = fromInt(millis_expr)
+                            let millis_dub_add_expr = new ir.Expr(3, [millis_mul_expr, expr_1], "numops::adds")
+                            let debug_expr = new ir.Expr(8, [timer_cellref_expr, millis_fromInt], "")
+                            let debug_stmt = new ir.Stmt(1, debug_expr)
+                            let subs_expr = new ir.Expr(3, [millis_fromInt,timer_cellref_expr],"numops::subs")
+                            let duration_expr = new ir.Expr(1,null,valueEncode(bin.opt_val))
+                            let numops_gt_expr = new ir.Expr(3,[subs_expr,duration_expr],"numops::gt")
+                            let gtBool_expr = new ir.Expr(3,[numops_gt_expr], "numops::toBoolDecr")
+                            let timerif_stmt = new ir.Stmt(3,gtBool_expr)
+                            timerif_stmt.jmpMode = 2
+                            timerif_stmt.lbl = elselbl
+                            timerif_stmt.lblName = elselbl.lblName
+                            //timer reset
+                            let timer_store_expr = new ir.Expr(8,[timer_cellref_expr,millis_fromInt],"")
+                            let timer_store_stmt = new ir.Stmt(1,timer_store_expr)
+                            let null_stmt = new ir.Stmt(4,null)
+                            emit_stack.unshift(null_stmt)
+                            emit_stack.unshift(timer_store_stmt) //ran into bug where I can't unshift all at once, have to separate them
+                            emit_stack.unshift(timerif_stmt)
+                            //emit_stack.unshift(null_stmt)
+                            //emit_stack.unshift(debug_stmt)
+                            emit_stack.push(elselbl)
+                        } else if(bin.optimization == 2){
+                            let p1_expr = new ir.Expr(1, null, 102)
+                            let analogread_expr = new ir.Expr(3, [p1_expr], "pins::analogReadPin")
+                            let jitval = new ir.Expr(1,null, valueEncode(bin.opt_val))
+                            //let jitcell_ref = new ir.Expr(9, null, bin.opt_cell)
+                            let analogfromint_expr = fromInt(analogread_expr)
+                            let numopts_lt_expr = new ir.Expr(3, [analogfromint_expr, jitval], "numops::lt")
+                            let toBool_expr = new ir.Expr(3, [numopts_lt_expr], "numops::toBoolDecr")
+                            let jitif_stmt = new ir.Stmt(3, toBool_expr)
+                            jitif_stmt.jmpMode = 2
+                            jitif_stmt.lbl = elselbl
+                            jitif_stmt.lblName = elselbl.lblName
+                            emit_stack.unshift(jitif_stmt)
+                            emit_stack.push(elselbl)
+                        } else if(bin.optimization == 3){
+                            //if(incominglblId != ""){
+                                let weight_cellref_expr = new ir.Expr(9, null, bin.opt_cell)
+                                let val_expr = new ir.Expr(1, null, valueEncode(bin.opt_val))
+                                let numops_gt_expr = new ir.Expr(3,[weight_cellref_expr,val_expr], "numops::gt")
+                                let weightBool_expr = new ir.Expr(3, [numops_gt_expr], "numops::toBoolDecr")
+                                let weightif_stmt = new ir.Stmt(3, weightBool_expr)
+                                weightif_stmt.jmpMode = 2
+                                weightif_stmt.lbl = elselbl
+                                weightif_stmt.lblName = elselbl.lblName
+                                let val0_expr = new ir.Expr(1, null, valueEncode(0))
+                                let opt_store_expr = new ir.Expr(8,[weight_cellref_expr,val0_expr],null)
+                                let opt_store_stmt = new ir.Stmt(1,opt_store_expr)
+                                emit_stack.unshift(opt_store_stmt)
+                                emit_stack.unshift(weightif_stmt)
+                                emit_stack.push(elselbl)
+                                let val1_expr = new ir.Expr(1, null, valueEncode(1))
+                                let add_expr = new ir.Expr(3, [weight_cellref_expr, val1_expr], "numops::adds")
+                                let storeadd_expr = new ir.Expr(8, [weight_cellref_expr, add_expr], null)
+                                let storeadd_stmt = new ir.Stmt(1,storeadd_expr)
+                                emit_stack.push(storeadd_stmt)
+
+                                //one of these expressions is fucking things up when it is emitted
+
+                            //}
+                        }
+
+                        //add label at the end of each checkpoint
+                        // enumerate each label as a number
+                        // save that number to a custom variable that will be saved in the checkpoint, will work like any other vairable
+                        // need to find a way to add switch statement at the top of the program
+                        let checkpointlabel = proc.mkLabel("Checkpoint")
+                        emit_stack.push(checkpointlabel)
+                        bin.checklabel.push(checkpointlabel)
+                        /*
+                        if(proc.body[i].lblName.includes("brk")){
+                            emitBlockInPlace(proc,i-1,emit_stack)
+                        } else if(proc.body[i].lblName.includes("else")){
+                            emitBlockInPlace(proc,i-1,emit_stack)
+                        } else {
+                            emitBlockInPlace(proc,i,emit_stack)
+                        }
+                        */
+                        emitBlockInPlace(proc,i,emit_stack)
+                        i+=emit_stack.length
+                        emit_stack = []
+                        emit_set.clear()
+                    
+                }
+                /*
+                if(proc.body[i].stmtKind == ir.SK.Label){
+                    if(proc.body[i].lblName.includes("final")){
+                        console.log("found a final, leaving")
+                        return
+                    } else if(emit_stack.length > -1){ //MAJOR THING!!!!!!! THIS CAUSES CHECKPOINT EVERY LINE
                         console.log("found a label, emitting")
                         emit_stack = [] //ugly hack to fix differential checkpointing, come back to this later
 
@@ -2044,6 +2167,7 @@ namespace ts.pxtc {
                         }
                     }
                 }
+                */
                 i++
             }
             
